@@ -66,14 +66,16 @@ func (api *k8sApi) watchPodEvents(namespace string) {
 					DefaultK8SMgr.DelCacheContainerMonitor(pod.Name, namespace)
 				} else {
 					// 信息变更缓存更新
-					DefaultK8SMgr.SetCacheContainerInfo(pod.Name, namespace, ContainerInfo{
-						Name:         strings.TrimRight(pod.Name, "-0"),
-						HostIP:       pod.Status.HostIP,
-						PodIP:        pod.Status.PodIP,
-						Status:       string(pod.Status.Phase),
-						ReStartCount: int(pod.Status.ContainerStatuses[0].RestartCount),
-						NewStartAt:   pod.Status.ContainerStatuses[0].State.Running.StartedAt.Time,
-					})
+					if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Running != nil {
+						DefaultK8SMgr.SetCacheContainerInfo(pod.Name, namespace, ContainerInfo{
+							Name:         strings.TrimRight(pod.Name, "-0"),
+							HostIP:       pod.Status.HostIP,
+							PodIP:        pod.Status.PodIP,
+							Status:       string(pod.Status.Phase),
+							ReStartCount: int(pod.Status.ContainerStatuses[0].RestartCount),
+							NewStartAt:   pod.Status.ContainerStatuses[0].State.Running.StartedAt.Time,
+						})
+					}
 				}
 			}
 		}
