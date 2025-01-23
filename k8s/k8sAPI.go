@@ -29,6 +29,7 @@ type API interface {
 	watchPodEvents(namespace string)                                                    // 容器运行状态监听
 	containerInfo(name, namespace string) (ContainerInfo, error)                        // 容器信息
 	containerMetricStat(name, namespace string) (StatInfo, error)                       // 容器监控信息
+	getAppNamesByNamespace(isSystem bool) ([]string, error)                             // 获取所有app名称
 }
 
 type k8sApi struct {
@@ -160,7 +161,14 @@ func (api *k8sApi) statefulSetRestart(name, namespace string, isTry ...bool) err
 }
 
 func (api *k8sApi) containerInfo(name, namespace string) (ContainerInfo, error) {
-	podName := fmt.Sprintf("%s-0", name)
+	var podName string
+	if namespace == api.systemNamespace {
+		podName = name
+	} else if namespace == api.appNamespace {
+		podName = fmt.Sprintf("%s-0", name)
+	} else {
+		return ContainerInfo{}, errors.New("get containerInfo namespace error")
+	}
 	if pod, err := api.client.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{}); err != nil {
 		return ContainerInfo{}, err
 	} else {
@@ -175,20 +183,19 @@ func (api *k8sApi) containerInfo(name, namespace string) (ContainerInfo, error) 
 	}
 }
 
-func (api *k8sApi) getNodeInfo() {
-
-}
 func (api *k8sApi) containerMetricStat(name, namespace string) (StatInfo, error) {
-	podName := fmt.Sprintf("%s-0", name)
 	var (
 		isSys       bool
 		totalCPUNum uint64
 		totalMemNum uint64
+		podName     string
 	)
 	if namespace == api.systemNamespace {
 		isSys = true
+		podName = name
 	} else if namespace == api.appNamespace {
 		isSys = false
+		podName = fmt.Sprintf("%s-0", name)
 	} else {
 		return StatInfo{}, errors.New("get containerMetricStat namespace error")
 	}
@@ -202,7 +209,7 @@ func (api *k8sApi) containerMetricStat(name, namespace string) (StatInfo, error)
 		totalCPU := nodeInfo.Status.Capacity[corev1.ResourceCPU]
 		totalMemory := nodeInfo.Status.Capacity[corev1.ResourceMemory]
 		// 转换为数字值
-		totalCPUNum = uint64(totalCPU.Value())
+		totalCPUNum = uint64(totalCPU.MilliValue())
 		totalMemNum = uint64(totalMemory.Value())
 	}
 	if podMetric, err := api.metric.MetricsV1beta1().PodMetricses(namespace).Get(context.TODO(), podName, metav1.GetOptions{}); err != nil {
@@ -210,20 +217,38 @@ func (api *k8sApi) containerMetricStat(name, namespace string) (StatInfo, error)
 	} else {
 		resourceCPU := podMetric.Containers[0].Usage[corev1.ResourceCPU]
 		resourceMemory := podMetric.Containers[0].Usage[corev1.ResourceMemory]
-		podUseCPURatio, _ := strconv.ParseFloat(fmt.Sprintf("%0.2f", float64(resourceCPU.Value())/float64(totalCPUNum)*100), 64)
+		podUseCPURatio, _ := strconv.ParseFloat(fmt.Sprintf("%0.2f", float64(resourceCPU.MilliValue())/float64(totalCPUNum)*100), 64)
 		podUseMemoryRatio, _ := strconv.ParseFloat(fmt.Sprintf("%0.2f", float64(resourceMemory.Value())/float64(totalMemNum)*100), 64)
 		return StatInfo{
 			Name: name,
 			CpuLoad: LoadInfo{
 				Total: totalCPUNum,
-				Used:  uint64(resourceCPU.Value()),
+				Used:  uint64(resourceCPU.MilliValue()),
 				Ratio: podUseCPURatio,
 			},
 			MemLoad: LoadInfo{
-				Total: totalMemNum,
-				Used:  uint64(resourceMemory.Value()),
+				Total: totalMemNum / 1024 / 1024,
+				Used:  uint64(resourceMemory.Value() / 1024 / 1024),
 				Ratio: podUseMemoryRatio,
 			},
 		}, nil
 	}
+}
+
+func (api *k8sApi) getAppNamesByNamespace(isSystem bool) ([]string, error) {
+	var (
+		namespace = api.appNamespace
+		nameList  []string
+	)
+	if isSystem {
+		namespace = api.systemNamespace
+	}
+	if pods, err := api.client.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{}); err != nil {
+		return nil, err
+	} else {
+		for _, item := range pods.Items {
+			nameList = append(nameList, item.Name)
+		}
+	}
+	return nameList, nil
 }

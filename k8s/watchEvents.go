@@ -47,28 +47,34 @@ func (api *k8sApi) watchPodEvents(namespace string) {
 				if !ok {
 					continue
 				}
+				var podName string
+				if namespace == api.systemNamespace {
+					podName = pod.Name
+				} else {
+					podName = strings.TrimRight(pod.Name, "-0")
+				}
 				switch event.Type {
 				case watch.Added:
-					logger.Info("添加事件: 容器: %s,所在域名空间: %s,最新状态: %v", pod.Name, pod.Namespace, pod.Status.Phase)
+					logger.Info("添加事件: 容器: %s,所在域名空间: %s,最新状态: %v", podName, pod.Namespace, pod.Status.Phase)
 				case watch.Modified:
-					logger.Info("更新事件: 容器: %s,所在域名空间: %s,最新状态: %v", pod.Name, pod.Namespace, pod.Status.Phase)
+					logger.Info("更新事件: 容器: %s,所在域名空间: %s,最新状态: %v", podName, pod.Namespace, pod.Status.Phase)
 				case watch.Deleted:
-					logger.Warn("删除事件: 容器: %s,所在域名空间: %s,最新状态: %v", pod.Name, pod.Namespace, pod.Status.Phase)
+					logger.Warn("删除事件: 容器: %s,所在域名空间: %s,最新状态: %v", podName, pod.Namespace, pod.Status.Phase)
 				default:
 					continue
 				}
 				if pod.Status.Phase != RunningStatus && len(pod.Status.Conditions) > 0 && pod.Status.Conditions[0].Message != "" {
-					logger.Warn("容器: %s,所在域名空间: %s, 部署异常信息: %v", pod.Name, pod.Namespace, pod.Status.Conditions[0].Message)
+					logger.Warn("容器: %s,所在域名空间: %s, 部署异常信息: %v", podName, pod.Namespace, pod.Status.Conditions[0].Message)
 				}
 				// 删除事件, 删除缓存
 				if event.Type == watch.Deleted {
-					logger.Warn("容器: %s,所在域名空间: %s, 删除事件, 删除缓存", pod.Name, pod.Namespace)
-					DefaultK8SMgr.DelCacheContainerMonitor(pod.Name, namespace)
+					logger.Warn("容器: %s,所在域名空间: %s, 删除事件, 删除缓存", podName, pod.Namespace)
+					DefaultK8SMgr.DelCacheContainerMonitor(podName, namespace)
 				} else {
 					// 信息变更缓存更新
 					if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Running != nil {
-						DefaultK8SMgr.SetCacheContainerInfo(pod.Name, namespace, ContainerInfo{
-							Name:         strings.TrimRight(pod.Name, "-0"),
+						DefaultK8SMgr.SetCacheContainerInfo(podName, namespace, ContainerInfo{
+							Name:         podName,
 							HostIP:       pod.Status.HostIP,
 							PodIP:        pod.Status.PodIP,
 							Status:       string(pod.Status.Phase),

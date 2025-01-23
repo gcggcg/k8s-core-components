@@ -29,6 +29,11 @@ type ManagerAPI interface {
 	SetCacheContainerInfo(name string, namespace string, info ContainerInfo)
 	SetCacheStatInfo(name string, namespace string, info StatInfo)
 	DelCacheContainerMonitor(name string, namespace string)
+	DelContainerStatInfo(name string, namespace string)
+	GetAllStatInfoOfSortByCpu(desc bool, namespace string) []*StatInfo
+	GetAllStatInfoOfSortByMem(desc bool, namespace string) []*StatInfo
+	InitStatByNamespace(appNames []string, isSys bool)
+	GetAppNamesByNamespace(isSystem bool) ([]string, error)
 	Stop()
 }
 
@@ -175,7 +180,8 @@ func (manage *ManagerK8s) GetCacheStatInfo(name string, isSys bool) (StatInfo, e
 		if info, err := manage.StatInfo(name, namespace); err != nil {
 			return StatInfo{}, err
 		} else {
-			manage.containerCache.setCacheStatInfo(name+"_"+namespace, info)
+			manage.SetCacheStatInfo(name, namespace, info)
+			go manage.containerCache.addMonitor(name, namespace)
 			return info, nil
 		}
 	}
@@ -186,10 +192,37 @@ func (manage *ManagerK8s) SetCacheContainerInfo(name string, namespace string, i
 }
 
 func (manage *ManagerK8s) SetCacheStatInfo(name string, namespace string, info StatInfo) {
-	logger.Info("【容器: %s】 set container cache info 命令执行中... ", name)
+	logger.Info("【容器: %s】 set container cache stat info 命令执行中... ", name)
 	manage.containerCache.setCacheStatInfo(name+"_"+namespace, info)
+}
+
+func (manage *ManagerK8s) DelContainerStatInfo(name string, namespace string) {
+	logger.Info("【容器: %s】 delete container statInfo cache 命令执行中... ", name)
+	manage.containerCache.delContainerStatInfo(name + "_" + namespace)
 }
 func (manage *ManagerK8s) DelCacheContainerMonitor(name string, namespace string) {
 	logger.Info("【容器: %s】 delete container cache 命令执行中... ", name)
 	manage.containerCache.delCacheContainerMonitor(name + "_" + namespace)
+}
+
+func (manage *ManagerK8s) InitStatByNamespace(appNames []string, isSys bool) {
+	logger.Info("【是否为系统组件: %v】 init container cache statInfo 命令执行中... ", isSys)
+	for _, name := range appNames {
+		if _, err := manage.GetCacheStatInfo(name, isSys); err != nil {
+			logger.Info("【容器: %s】 首次启动初始化Stat的时候出现异常: %v", name, err)
+		}
+	}
+}
+func (manage *ManagerK8s) GetAppNamesByNamespace(isSystem bool) ([]string, error) {
+	logger.Info("【是否为系统组件: %v】 get all appNames by Namespace 命令执行中... ", isSystem)
+	return manage.api.getAppNamesByNamespace(isSystem)
+}
+func (manage *ManagerK8s) GetAllStatInfoOfSortByCpu(desc bool, namespace string) []*StatInfo {
+	logger.Info("【空间: %s】 get container cache all statInfo by cpu desc: %v命令执行中... ", namespace, desc)
+	return manage.containerCache.getAllStatInfoOfSortByCpu(desc, namespace)
+}
+
+func (manage *ManagerK8s) GetAllStatInfoOfSortByMem(desc bool, namespace string) []*StatInfo {
+	logger.Info("【空间: %s】 get container cache all statInfo by mem desc: %v命令执行中... ", namespace, desc)
+	return manage.containerCache.getAllStatInfoOfSortByMem(desc, namespace)
 }
