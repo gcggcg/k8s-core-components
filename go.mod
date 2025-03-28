@@ -1,14 +1,14 @@
 module github.com/gcggcg/k8s-core-components
 
-go 1.21.1
+go 1.18
 
 require (
 	github.com/alecthomas/log4go v0.0.0-20180109082532-d146e6b86faa
 	github.com/golang/protobuf v1.5.2
-	k8s.io/api v0.26.0
-	k8s.io/apimachinery v0.26.0
-	k8s.io/client-go v0.26.0
-	k8s.io/metrics v0.26.0
+	k8s.io/api v0.26.1
+	k8s.io/apimachinery v0.26.1
+	k8s.io/client-go v0.26.1
+	k8s.io/metrics v0.26.1
 )
 
 require (
